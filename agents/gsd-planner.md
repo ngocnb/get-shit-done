@@ -3,8 +3,6 @@ name: gsd-planner
 description: Creates executable phase plans with task breakdown, dependency analysis, and goal-backward verification. Spawned by /gsd:plan-phase orchestrator.
 tools: Read, Write, Bash, Glob, Grep, WebFetch, mcp__context7__*
 color: green
-skills:
-  - gsd-planner-workflow
 # hooks:
 #   PostToolUse:
 #     - matcher: "Write|Edit"
@@ -275,6 +273,64 @@ For each external service, determine:
 
 Record in `user_setup` frontmatter. Only include what Claude literally cannot do. Do NOT surface in planning output — execute-plan handles presentation.
 
+## API Dependency Detection (MANDATORY)
+
+**Problem this prevents:** Frontend tasks calling backend APIs that don't exist yet.
+
+For ANY frontend task that:
+- Calls `fetch('/api/...')` or uses a query hook (`useGetXxxQuery`)
+- References a backend endpoint in its action
+
+**MUST verify the API exists before planning the frontend task.**
+
+### Verification Process
+
+1. **Search for the endpoint in backend:**
+   ```bash
+   grep -r "api/models/alibaba" src/ --include="*.py"
+   grep -r "/models/alibaba" src/main.py
+   ```
+
+2. **Check route registration:**
+   ```bash
+   grep -r "add_api_route.*models" src/main.py
+   ```
+
+3. **If API NOT found:**
+   - Create a backend task FIRST (lower wave number)
+   - Add frontend task as dependent on backend task
+   - Backend task creates the API endpoint
+   - Frontend task consumes the API endpoint
+
+### Example
+
+**Before (broken):**
+```
+Wave 1: Frontend - Add Alibaba settings form (calls /api/models/alibaba)
+```
+
+**After (correct):**
+```
+Wave 1: Backend - Add /api/models/alibaba endpoint
+Wave 2: Frontend - Add Alibaba settings form (depends on Wave 1)
+```
+
+### Quick Check Pattern
+
+When you see frontend code like:
+```tsx
+const response = await fetch("/api/models/alibaba", ...)
+```
+
+Or a query hook like:
+```tsx
+useGetAlibabaModelsQuery()
+```
+
+Immediately check if the backend route exists. If not, **add a backend task before the frontend task.**
+
+**This is a MANDATORY check** — not optional. Missing APIs cause confusing errors at runtime.
+
 </task_breakdown>
 
 <dependency_graph>
@@ -428,8 +484,8 @@ Output: [Artifacts created]
 </objective>
 
 <execution_context>
-@~/.claude/get-shit-done/workflows/execute-plan.md
-@~/.claude/get-shit-done/templates/summary.md
+@/home/baongoc/workspaces/openrag/.claude/get-shit-done/workflows/execute-plan.md
+@/home/baongoc/workspaces/openrag/.claude/get-shit-done/templates/summary.md
 </execution_context>
 
 <context>
@@ -494,7 +550,7 @@ After determining `files_modified`, extract the key interfaces/types/exports fro
 
 ```bash
 # Extract type definitions, interfaces, and exports from relevant files
-grep -n "export\|interface\|type\|class\|function" {relevant_source_files} 2>/dev/null | head -50
+grep -n "export\\|interface\\|type\\|class\\|function" {relevant_source_files} 2>/dev/null | head -50
 ```
 
 Embed these in the plan's `<context>` section as an `<interfaces>` block:
@@ -933,7 +989,7 @@ Group by plan, dimension, severity.
 ### Step 6: Commit
 
 ```bash
-node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "fix($PHASE): revise plans based on checker feedback" --files .planning/phases/$PHASE-*/$PHASE-*-PLAN.md
+node "/home/baongoc/workspaces/openrag/.claude/get-shit-done/bin/gsd-tools.cjs" commit "fix($PHASE): revise plans based on checker feedback" --files .planning/phases/$PHASE-*/$PHASE-*-PLAN.md
 ```
 
 ### Step 7: Return Revision Summary
@@ -972,7 +1028,7 @@ node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "fix($PHASE): revise
 Load planning context:
 
 ```bash
-INIT=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" init plan-phase "${PHASE}")
+INIT=$(node "/home/baongoc/workspaces/openrag/.claude/get-shit-done/bin/gsd-tools.cjs" init plan-phase "${PHASE}")
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```
 
@@ -1029,7 +1085,7 @@ Apply discovery level protocol (see discovery_levels section).
 
 **Step 1 — Generate digest index:**
 ```bash
-node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" history-digest
+node "/home/baongoc/workspaces/openrag/.claude/get-shit-done/bin/gsd-tools.cjs" history-digest
 ```
 
 **Step 2 — Select relevant phases (typically 2-4):**
@@ -1157,7 +1213,7 @@ Include all frontmatter fields.
 Validate each created PLAN.md using gsd-tools:
 
 ```bash
-VALID=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" frontmatter validate "$PLAN_PATH" --schema plan)
+VALID=$(node "/home/baongoc/workspaces/openrag/.claude/get-shit-done/bin/gsd-tools.cjs" frontmatter validate "$PLAN_PATH" --schema plan)
 ```
 
 Returns JSON: `{ valid, missing, present, schema }`
@@ -1170,7 +1226,7 @@ Required plan frontmatter fields:
 Also validate plan structure:
 
 ```bash
-STRUCTURE=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" verify plan-structure "$PLAN_PATH")
+STRUCTURE=$(node "/home/baongoc/workspaces/openrag/.claude/get-shit-done/bin/gsd-tools.cjs" verify plan-structure "$PLAN_PATH")
 ```
 
 Returns JSON: `{ valid, errors, warnings, task_count, tasks }`
@@ -1207,7 +1263,7 @@ Plans:
 
 <step name="git_commit">
 ```bash
-node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs($PHASE): create phase plan" --files .planning/phases/$PHASE-*/$PHASE-*-PLAN.md .planning/ROADMAP.md
+node "/home/baongoc/workspaces/openrag/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs($PHASE): create phase plan" --files .planning/phases/$PHASE-*/$PHASE-*-PLAN.md .planning/ROADMAP.md
 ```
 </step>
 
